@@ -1,0 +1,9 @@
+UNDIRECTED WEIGHTED
+X Y Z W P Q R S
+X Y 5
+Y Z 3
+X Z 10
+W W 2
+P Q 1
+Q R 1
+R P 1
