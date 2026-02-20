@@ -21,6 +21,12 @@ namespace Graph
         }
     }
 
+    public enum GraphSaveFormat
+    {
+        EdgeList,
+        AdjacencyList
+    }
+
     public class Graph<T> where T : notnull, IComparable<T>
     {
         private Dictionary<T, Dictionary<T, double>> _adjacencyList;
@@ -202,7 +208,7 @@ namespace Graph
             return edges;
         }
 
-        public void SaveToFile(string filePath)
+        public void SaveToFile(string filePath, GraphSaveFormat format = GraphSaveFormat.EdgeList)
         {
             using (var writer = new StreamWriter(filePath))
             {
@@ -212,16 +218,41 @@ namespace Graph
 
                 writer.WriteLine(string.Join(" ", _adjacencyList.Keys));
 
-                var edges = GetEdgeList();
-                foreach (var edge in edges)
+                if (format == GraphSaveFormat.EdgeList)
                 {
-                    string line = $"{edge.From} {edge.To}";
-                    if (IsWeighted)
+                    var edges = GetEdgeList();
+                    foreach (var edge in edges)
                     {
-                        line += $" {edge.Weight}";
-                    }
+                        string line = $"{edge.From} {edge.To}";
+                        if (IsWeighted)
+                        {
+                            line += $" {edge.Weight}";
+                        }
 
-                    writer.WriteLine(line);
+                        writer.WriteLine(line);
+                    }
+                }
+                else
+                {
+                    foreach (var kvp in _adjacencyList)
+                    {
+                        var sb = new StringBuilder();
+                        sb.Append(kvp.Key);
+                        
+                        if (kvp.Value.Count > 0)
+                        {
+                            sb.Append(":");
+                            foreach (var neighbor in kvp.Value)
+                            {
+                                if (IsWeighted)
+                                    sb.Append($" {neighbor.Key}({neighbor.Value})");
+                                else
+                                    sb.Append($" {neighbor.Key}");
+                            }
+                        }
+                        
+                        writer.WriteLine(sb.ToString());
+                    }
                 }
             }
         }

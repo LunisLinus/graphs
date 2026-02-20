@@ -1,5 +1,3 @@
-using System;
-
 namespace Graph
 {
     public class ConsoleInterface
@@ -8,7 +6,6 @@ namespace Graph
 
         public ConsoleInterface()
         {
-            // Начинаем с пустого графа по умолчанию
             _graph = new Graph<string>(isDirected: false, isWeighted: false);
         }
 
@@ -86,7 +83,6 @@ namespace Graph
         {
             Console.Write("Введите путь к файлу: ");
             string path = Console.ReadLine();
-            // Используем парсер "как есть" для строк
             _graph = new Graph<string>(path, s => s); 
             Console.WriteLine("Граф успешно загружен.");
         }
@@ -95,7 +91,20 @@ namespace Graph
         {
             Console.Write("Введите путь к файлу: ");
             string path = Console.ReadLine();
-            _graph.SaveToFile(path);
+
+            Console.WriteLine("Выберите формат сохранения:");
+            Console.WriteLine("1. Список граней (Edge List)");
+            Console.WriteLine("2. Список смежности (Adjacency List)");
+            Console.Write("Ваш выбор: ");
+            string choice = Console.ReadLine();
+
+            GraphSaveFormat format = GraphSaveFormat.EdgeList;
+            if (choice == "2")
+            {
+                format = GraphSaveFormat.AdjacencyList;
+            }
+
+            _graph.SaveToFile(path, format);
             Console.WriteLine("Граф успешно сохранен.");
         }
 
