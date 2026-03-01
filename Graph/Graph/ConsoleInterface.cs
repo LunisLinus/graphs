@@ -21,8 +21,11 @@ namespace Graph
                 Console.WriteLine("5. Добавить ребро (дугу)");
                 Console.WriteLine("6. Удалить ребро (дугу)");
                 Console.WriteLine("7. Показать список смежности");
-                Console.WriteLine("8. Сохранить в файл");
-                Console.WriteLine("9. Выход");
+                Console.WriteLine("8. Вывести не смежные вершины");
+                Console.WriteLine("9. Вывести изолированные вершины");
+                Console.WriteLine("10. Удалить ребра в висячие вершины");
+                Console.WriteLine("11. Сохранить в файл");
+                Console.WriteLine("12. Выход");
                 Console.Write("Выберите опцию: ");
 
                 string choice = Console.ReadLine();
@@ -53,9 +56,18 @@ namespace Graph
                             Console.WriteLine(_graph.ToString());
                             break;
                         case "8":
-                            SaveGraph();
+                            ShowNonAdjacent();
                             break;
                         case "9":
+                            ShowIsolated();
+                            break;
+                        case "10":
+                            RemoveEdgesToPendant();
+                            break;
+                        case "11":
+                            SaveGraph();
+                            break;
+                        case "12":
                             return;
                         default:
                             Console.WriteLine("Неверная опция.");
@@ -85,6 +97,48 @@ namespace Graph
             string path = Console.ReadLine();
             _graph = new Graph<string>(path, s => s); 
             Console.WriteLine("Граф успешно загружен.");
+        }
+
+        private void ShowNonAdjacent()
+        {
+            Console.Write("Введите имя вершины: ");
+            string v = Console.ReadLine();
+            
+            if (!_graph.ContainsVertex(v))
+            {
+                Console.WriteLine($"Вершина '{v}' не найдена.");
+                return;
+            }
+
+            var nonAdjacent = _graph.GetNonAdjacentVertices(v);
+            if (nonAdjacent.Count == 0)
+            {
+                Console.WriteLine($"У вершины '{v}' нет не смежных вершин (она смежна со всеми другими).");
+            }
+            else
+            {
+                Console.WriteLine($"Вершины, не смежные с '{v}': {string.Join(", ", nonAdjacent)}");
+            }
+        }
+
+        private void ShowIsolated()
+        {
+            var isolated = _graph.GetIsolatedVertices();
+            if (isolated.Count == 0)
+            {
+                Console.WriteLine("В графе нет изолированных вершин.");
+            }
+            else
+            {
+                Console.WriteLine($"Изолированные вершины: {string.Join(", ", isolated)}");
+            }
+        }
+
+        private void RemoveEdgesToPendant()
+        {
+            var newGraph = _graph.RemoveEdgesToPendantVertices();
+            _graph = newGraph;
+            Console.WriteLine("Ребра, ведущие в висячие вершины, удалены. Граф обновлен.");
         }
 
         private void SaveGraph()

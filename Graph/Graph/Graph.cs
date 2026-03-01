@@ -58,10 +58,10 @@ namespace Graph
 
         public Graph(string filePath, Func<string, T> parser)
         {
-            if (!File.Exists(filePath)) throw new FileNotFoundException("File not found", filePath);
+            if (!File.Exists(filePath)) throw new FileNotFoundException("Файл не найден", filePath);
 
             var lines = File.ReadAllLines(filePath).Where(l => !string.IsNullOrWhiteSpace(l)).ToArray();
-            if (lines.Length < 2) throw new ArgumentException("Invalid file format: too few lines.");
+            if (lines.Length < 2) throw new ArgumentException("Неверный формат файла: слишком мало строк.");
 
             var headerParts = lines[0].Split(' ', StringSplitOptions.RemoveEmptyEntries);
             IsDirected = headerParts.Contains("DIRECTED", StringComparer.OrdinalIgnoreCase);
@@ -96,7 +96,7 @@ namespace Graph
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"Warning processing line {i + 1}: {ex.Message}");
+                    Console.WriteLine($"Ошибка при обработке строки {i + 1}: {ex.Message}");
                 }
             }
         }
@@ -138,13 +138,13 @@ namespace Graph
 
         public void AddEdge(T from, T to, double weight = 1.0)
         {
-            if (!_adjacencyList.ContainsKey(from)) throw new ArgumentException($"Vertex {from} does not exist.");
-            if (!_adjacencyList.ContainsKey(to)) throw new ArgumentException($"Vertex {to} does not exist.");
+            if (!_adjacencyList.ContainsKey(from)) throw new ArgumentException($"Вершина {from} не существует.");
+            if (!_adjacencyList.ContainsKey(to)) throw new ArgumentException($"Вершина {to} не существует.");
 
             if (!IsWeighted) weight = 1.0;
 
             if (_adjacencyList[from].ContainsKey(to))
-                throw new InvalidOperationException($"Edge from {from} to {to} already exists.");
+                throw new InvalidOperationException($"Ребро из {from} в {to} уже существует.");
 
             _adjacencyList[from][to] = weight;
 
@@ -154,7 +154,7 @@ namespace Graph
                 {
                     if (_adjacencyList[to].ContainsKey(from))
                         throw new InvalidOperationException(
-                            $"Edge from {to} to {from} already exists (Consistency error).");
+                            $"Ребро из {to} в {from} уже существует (Ошибка согласованности).");
 
                     _adjacencyList[to][from] = weight;
                 }
@@ -260,14 +260,16 @@ namespace Graph
         public override string ToString()
         {
             var sb = new StringBuilder();
-            sb.AppendLine($"Graph (Directed: {IsDirected}, Weighted: {IsWeighted})");
-            sb.AppendLine($"Vertices: {_adjacencyList.Count}");
+            string directedStr = IsDirected ? "Да" : "Нет";
+            string weightedStr = IsWeighted ? "Да" : "Нет";
+            sb.AppendLine($"Граф (Ориентированный: {directedStr}, Взвешенный: {weightedStr})");
+            sb.AppendLine($"Количество вершин: {_adjacencyList.Count}");
             foreach (var kvp in _adjacencyList)
             {
                 sb.Append($"{kvp.Key}: ");
                 if (kvp.Value.Count == 0)
                 {
-                    sb.AppendLine("(isolated)");
+                    sb.AppendLine("(изолированная)");
                 }
                 else
                 {
@@ -280,5 +282,125 @@ namespace Graph
         }
 
         public bool ContainsVertex(T vertex) => _adjacencyList.ContainsKey(vertex);
+
+        public List<T> GetNonAdjacentVertices(T vertex)
+        {
+            if (!_adjacencyList.ContainsKey(vertex))
+                throw new ArgumentException($"Вершина {vertex} не найдена.");
+
+            var nonAdjacent = new List<T>();
+            var neighbors = _adjacencyList[vertex];
+
+            foreach (var v in _adjacencyList.Keys)
+            {
+                if (!v.Equals(vertex) && !neighbors.ContainsKey(v))
+                {
+                    nonAdjacent.Add(v);
+                }
+            }
+
+            return nonAdjacent;
+        }
+
+        public List<T> GetIsolatedVertices()
+        {
+            var isolated = new List<T>();
+            var allVertices = _adjacencyList.Keys.ToList();
+
+            var incomingEdges = new HashSet<T>();
+            foreach (var kvp in _adjacencyList)
+            {
+                foreach (var neighbor in kvp.Value.Keys)
+                {
+                    incomingEdges.Add(neighbor);
+                }
+            }
+
+            foreach (var v in allVertices)
+            {
+                bool hasOutgoing = _adjacencyList[v].Count > 0;
+                
+                if (IsDirected)
+                {
+                    bool hasIncoming = incomingEdges.Contains(v);
+                    if (!hasOutgoing && !hasIncoming)
+                    {
+                        isolated.Add(v);
+                    }
+                }
+                else
+                {
+                    if (!hasOutgoing)
+                    {
+                        isolated.Add(v);
+                    }
+                }
+            }
+
+            return isolated;
+        }
+
+        public Graph<T> RemoveEdgesToPendantVertices()
+        {
+            var newGraph = new Graph<T>(this);
+            
+            var degrees = new Dictionary<T, int>();
+            foreach (var v in _adjacencyList.Keys)
+            {
+                degrees[v] = 0;
+            }
+
+            foreach (var kvp in _adjacencyList)
+            {
+                T u = kvp.Key;
+                degrees[u] += kvp.Value.Count;
+
+                foreach (var v in kvp.Value.Keys)
+                {
+                    if (IsDirected)
+                    {
+                        if (!degrees.ContainsKey(v)) degrees[v] = 0;
+                        degrees[v]++;
+                    }
+                }
+            }
+            if (!IsDirected)
+            {
+                foreach (var v in _adjacencyList.Keys)
+                {
+                    int degree = 0;
+                    if (_adjacencyList[v].ContainsKey(v))
+                    {
+                        degree = _adjacencyList[v].Count + 1;
+                    }
+                    else
+                    {
+                        degree = _adjacencyList[v].Count;
+                    }
+                    degrees[v] = degree;
+                }
+            }
+            var pendantVertices = degrees.Where(kvp => kvp.Value == 1).Select(kvp => kvp.Key).ToHashSet();
+            var edgesToRemove = new List<(T From, T To)>();
+
+            foreach (var kvp in _adjacencyList)
+            {
+                T u = kvp.Key;
+                foreach (var v in kvp.Value.Keys)
+                {
+                    if (pendantVertices.Contains(v))
+                    {
+                        edgesToRemove.Add((u, v));
+                    }
+                }
+            }
+
+            foreach (var edge in edgesToRemove)
+            {
+                newGraph.RemoveEdge(edge.From, edge.To);
+            }
+
+            return newGraph;
+        }
     }
 }
