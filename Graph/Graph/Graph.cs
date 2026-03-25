@@ -238,7 +238,7 @@ namespace Graph
                     {
                         var sb = new StringBuilder();
                         sb.Append(kvp.Key);
-                        
+
                         if (kvp.Value.Count > 0)
                         {
                             sb.Append(":");
@@ -250,7 +250,7 @@ namespace Graph
                                     sb.Append($" {neighbor.Key}");
                             }
                         }
-                        
+
                         writer.WriteLine(sb.ToString());
                     }
                 }
@@ -319,7 +319,7 @@ namespace Graph
             foreach (var v in allVertices)
             {
                 bool hasOutgoing = _adjacencyList[v].Count > 0;
-                
+
                 if (IsDirected)
                 {
                     bool hasIncoming = incomingEdges.Contains(v);
@@ -343,7 +343,7 @@ namespace Graph
         public Graph<T> RemoveEdgesToPendantVertices()
         {
             var newGraph = new Graph<T>(this);
-            
+
             var degrees = new Dictionary<T, int>();
             foreach (var v in _adjacencyList.Keys)
             {
@@ -364,6 +364,7 @@ namespace Graph
                     }
                 }
             }
+
             if (!IsDirected)
             {
                 foreach (var v in _adjacencyList.Keys)
@@ -377,10 +378,13 @@ namespace Graph
                     {
                         degree = _adjacencyList[v].Count;
                     }
+
                     degrees[v] = degree;
                 }
             }
+
             var pendantVertices = degrees.Where(kvp => kvp.Value == 1).Select(kvp => kvp.Key).ToHashSet();
+
             var edgesToRemove = new List<(T From, T To)>();
 
             foreach (var kvp in _adjacencyList)
@@ -401,6 +405,893 @@ namespace Graph
             }
 
             return newGraph;
+        }
+
+        public List<List<T>> GetFundamentalCyclesDFS()
+        {
+            var cycles = new List<List<T>>();
+            var visited = new HashSet<T>();
+            var recursionStack = new HashSet<T>();
+            var parent = new Dictionary<T, T>();
+
+            foreach (var vertex in _adjacencyList.Keys)
+            {
+                if (!visited.Contains(vertex))
+                {
+                    DFSFindCycles(vertex, visited, recursionStack, parent, cycles);
+                }
+            }
+
+            return cycles;
+        }
+
+        private void DFSFindCycles(T current, HashSet<T> visited, HashSet<T> recursionStack,
+            Dictionary<T, T> parent, List<List<T>> cycles)
+        {
+            visited.Add(current);
+            recursionStack.Add(current);
+
+            if (_adjacencyList.ContainsKey(current))
+            {
+                foreach (var neighbor in _adjacencyList[current].Keys)
+                {
+                    if (recursionStack.Contains(neighbor))
+                    {
+                        if (!IsDirected && parent.ContainsKey(current) && parent[current].Equals(neighbor))
+                            continue;
+
+                        var cycle = new List<T>();
+                        cycle.Add(neighbor);
+
+                        var temp = current;
+                        while (!temp.Equals(neighbor))
+                        {
+                            cycle.Add(temp);
+                            if (parent.ContainsKey(temp))
+                                temp = parent[temp];
+                            else
+                                break;
+                        }
+
+                        cycle.Reverse();
+
+                        var correctCycle = new List<T>();
+                        var p = current;
+                        while (!p.Equals(neighbor))
+                        {
+                            correctCycle.Add(p);
+                            p = parent[p];
+                        }
+
+                        correctCycle.Add(neighbor);
+                        correctCycle.Reverse();
+                        correctCycle.Add(neighbor);
+
+                        cycles.Add(correctCycle);
+                    }
+                    else if (!visited.Contains(neighbor))
+                    {
+                        parent[neighbor] = current;
+                        DFSFindCycles(neighbor, visited, recursionStack, parent, cycles);
+                    }
+                }
+            }
+
+            recursionStack.Remove(current);
+        }
+
+        public List<List<T>> GetFundamentalCyclesBFS()
+        {
+            var cycles = new List<List<T>>();
+            var visited = new HashSet<T>();
+            var parent = new Dictionary<T, T>();
+            var treeEdges = new HashSet<(T, T)>();
+
+            foreach (var start in _adjacencyList.Keys)
+            {
+                if (visited.Contains(start)) continue;
+
+                var queue = new Queue<T>();
+                queue.Enqueue(start);
+                visited.Add(start);
+
+                while (queue.Count > 0)
+                {
+                    var u = queue.Dequeue();
+
+                    foreach (var v in _adjacencyList[u].Keys)
+                    {
+                        if (!visited.Contains(v))
+                        {
+                            visited.Add(v);
+                            parent[v] = u;
+                            treeEdges.Add((u, v));
+                            queue.Enqueue(v);
+                        }
+                    }
+                }
+            }
+
+            foreach (var u in _adjacencyList.Keys)
+            {
+                foreach (var v in _adjacencyList[u].Keys)
+                {
+                    if (treeEdges.Contains((u, v)) || treeEdges.Contains((v, u)))
+                        continue;
+
+                    if (!IsDirected && u.CompareTo(v) > 0)
+                        continue;
+
+                    if (!parent.ContainsKey(u) && !parent.ContainsKey(v))
+                        continue;
+
+                    var pathU = GetPathToRoot(u, parent);
+                    var pathV = GetPathToRoot(v, parent);
+
+                    var setV = new HashSet<T>(pathV);
+
+                    T lca = default!;
+                    bool found = false;
+
+                    foreach (var node in pathU)
+                    {
+                        if (setV.Contains(node))
+                        {
+                            lca = node;
+                            found = true;
+                            break;
+                        }
+                    }
+
+                    if (!found) continue;
+
+                    var cycle = new List<T>();
+
+                    var temp = u;
+                    while (!temp.Equals(lca))
+                    {
+                        cycle.Add(temp);
+                        temp = parent[temp];
+                    }
+
+                    cycle.Add(lca);
+
+                    var stack = new Stack<T>();
+                    temp = v;
+
+                    while (!temp.Equals(lca))
+                    {
+                        stack.Push(temp);
+                        temp = parent[temp];
+                    }
+
+                    while (stack.Count > 0)
+                        cycle.Add(stack.Pop());
+
+                    cycle.Add(u);
+
+                    cycles.Add(cycle);
+                }
+            }
+
+            return cycles;
+        }
+
+        private List<T> GetPathToRoot(T node, Dictionary<T, T> parent)
+        {
+            var path = new List<T>();
+            var current = node;
+
+            path.Add(current);
+
+            while (parent.ContainsKey(current))
+            {
+                current = parent[current];
+                path.Add(current);
+            }
+
+            return path;
+        }
+
+        public T FindEquidistantVertexBFS(T u, T v)
+        {
+            if (!_adjacencyList.ContainsKey(u)) throw new ArgumentException($"Вершина {u} не найдена.");
+            if (!_adjacencyList.ContainsKey(v)) throw new ArgumentException($"Вершина {v} не найдена.");
+
+            var distU = GetDistancesBFS(u);
+            var distV = GetDistancesBFS(v);
+
+            foreach (var node in _adjacencyList.Keys)
+            {
+                if (distU.ContainsKey(node) && distV.ContainsKey(node))
+                {
+                    if (distU[node] == distV[node])
+                    {
+                        return node;
+                    }
+                }
+            }
+
+            return default;
+        }
+
+        private Dictionary<T, int> GetDistancesBFS(T start)
+        {
+            var dist = new Dictionary<T, int>();
+            var queue = new Queue<T>();
+
+            dist[start] = 0;
+            queue.Enqueue(start);
+
+            while (queue.Count > 0)
+            {
+                var curr = queue.Dequeue();
+                if (_adjacencyList.ContainsKey(curr))
+                {
+                    foreach (var neighbor in _adjacencyList[curr].Keys)
+                    {
+                        if (!dist.ContainsKey(neighbor))
+                        {
+                            dist[neighbor] = dist[curr] + 1;
+                            queue.Enqueue(neighbor);
+                        }
+                    }
+                }
+            }
+
+            return dist;
+        }
+
+        public T FindEquidistantVertexDFS(T u, T v)
+        {
+            if (!_adjacencyList.ContainsKey(u)) throw new ArgumentException($"Вершина {u} не найдена.");
+            if (!_adjacencyList.ContainsKey(v)) throw new ArgumentException($"Вершина {v} не найдена.");
+
+            var depthU = new Dictionary<T, int>();
+            DFSCollectDepths(u, 0, new HashSet<T>(), depthU);
+
+            return DFSCheckDepths(v, 0, new HashSet<T>(), depthU);
+        }
+
+        private void DFSCollectDepths(T current, int depth, HashSet<T> visited, Dictionary<T, int> depths)
+        {
+            visited.Add(current);
+            if (!depths.ContainsKey(current))
+            {
+                depths[current] = depth;
+            }
+
+            if (_adjacencyList.ContainsKey(current))
+            {
+                foreach (var neighbor in _adjacencyList[current].Keys)
+                {
+                    if (!visited.Contains(neighbor))
+                    {
+                        DFSCollectDepths(neighbor, depth + 1, visited, depths);
+                    }
+                }
+            }
+        }
+
+        private T DFSCheckDepths(T current, int depth, HashSet<T> visited, Dictionary<T, int> depthsU)
+        {
+            visited.Add(current);
+
+            if (depthsU.ContainsKey(current) && depthsU[current] == depth)
+            {
+                return current;
+            }
+
+            if (_adjacencyList.ContainsKey(current))
+            {
+                foreach (var neighbor in _adjacencyList[current].Keys)
+                {
+                    if (!visited.Contains(neighbor))
+                    {
+                        var result = DFSCheckDepths(neighbor, depth + 1, visited, depthsU);
+                        if (!EqualityComparer<T>.Default.Equals(result, default)) return result;
+                    }
+                }
+            }
+
+            return default;
+        }
+
+        public Graph<T> GetMinimumSpanningTreeBoruvka()
+        {
+            if (IsDirected)
+                throw new InvalidOperationException("Алгоритм Борувка работает только для неориентированных графов.");
+
+            var mst = new Graph<T>(false, IsWeighted);
+
+            foreach (var v in _adjacencyList.Keys)
+                mst.AddVertex(v);
+
+            var parent = new Dictionary<T, T>();
+            var rank = new Dictionary<T, int>();
+
+            foreach (var v in _adjacencyList.Keys)
+            {
+                parent[v] = v;
+                rank[v] = 0;
+            }
+
+            T Find(T i)
+            {
+                if (!parent[i].Equals(i))
+                    parent[i] = Find(parent[i]);
+                return parent[i];
+            }
+
+            void Union(T i, T j)
+            {
+                T rootI = Find(i);
+                T rootJ = Find(j);
+
+                if (!rootI.Equals(rootJ))
+                {
+                    if (rank[rootI] < rank[rootJ])
+                        parent[rootI] = rootJ;
+                    else if (rank[rootI] > rank[rootJ])
+                        parent[rootJ] = rootI;
+                    else
+                    {
+                        parent[rootJ] = rootI;
+                        rank[rootI]++;
+                    }
+
+                    Console.WriteLine($"Union: {rootI} и {rootJ} объединены");
+                }
+            }
+
+            int numTrees = _adjacencyList.Count;
+            int step = 1;
+
+            while (numTrees > 1)
+            {
+                Console.WriteLine($"\n=== Шаг {step} ===");
+
+                var cheapest = new Dictionary<T, (T u, T v, double w)>();
+                bool edgeAdded = false;
+
+                foreach (var u in _adjacencyList.Keys)
+                {
+                    foreach (var kvp in _adjacencyList[u])
+                    {
+                        T v = kvp.Key;
+                        double w = kvp.Value;
+
+                        if (!IsDirected)
+                        {
+                            int comparison;
+
+                            if (u is IComparable<T> cGeneric)
+                                comparison = cGeneric.CompareTo(v);
+                            else if (u is IComparable c)
+                                comparison = c.CompareTo(v);
+                            else
+                                comparison = u.GetHashCode().CompareTo(v.GetHashCode());
+
+                            if (comparison > 0) continue;
+                        }
+
+                        T setU = Find(u);
+                        T setV = Find(v);
+
+                        Console.WriteLine($"Проверяем ребро {u} - {v} (вес {w})");
+
+                        if (!setU.Equals(setV))
+                        {
+                            Console.WriteLine($"Компоненты: {setU} и {setV}");
+
+                            if (!cheapest.ContainsKey(setU) || w < cheapest[setU].w)
+                            {
+                                cheapest[setU] = (u, v, w);
+                                Console.WriteLine($"Минимальное ребро для компоненты {setU}: {u}-{v} ({w})");
+                            }
+
+                            if (!cheapest.ContainsKey(setV) || w < cheapest[setV].w)
+                            {
+                                cheapest[setV] = (u, v, w);
+                                Console.WriteLine($"Минимальное ребро для компоненты {setV}: {u}-{v} ({w})");
+                            }
+                        }
+                    }
+                }
+
+                var edgesToAdd = cheapest.Values.Distinct().ToList();
+
+                Console.WriteLine("\nДобавляем рёбра:");
+
+                foreach (var edge in edgesToAdd)
+                {
+                    T setU = Find(edge.u);
+                    T setV = Find(edge.v);
+
+                    if (!setU.Equals(setV))
+                    {
+                        Console.WriteLine($"Добавлено ребро {edge.u} - {edge.v} (вес {edge.w})");
+
+                        mst.AddEdge(edge.u, edge.v, edge.w);
+                        Union(setU, setV);
+
+                        numTrees--;
+                        edgeAdded = true;
+                    }
+                }
+
+                if (!edgeAdded)
+                {
+                    Console.WriteLine("Нет рёбер для объединения. Граф несвязный.");
+                    break;
+                }
+
+                step++;
+            }
+
+            Console.WriteLine("\n=== Готовое минимальное остовное дерево ===");
+
+            foreach (var edge in mst.GetEdgeList())
+            {
+                Console.WriteLine(edge);
+            }
+
+            return mst;
+        }
+
+        public (double distance, List<List<T>> paths) GetShortestPathsDijkstra(T start, T end)
+        {
+            if (!_adjacencyList.ContainsKey(start)) throw new ArgumentException($"Вершина {start} не найдена.");
+            if (!_adjacencyList.ContainsKey(end)) throw new ArgumentException($"Вершина {end} не найдена.");
+
+            foreach (var u in _adjacencyList)
+            {
+                foreach (var v in u.Value)
+                {
+                    if (v.Value < 0)
+                        throw new InvalidOperationException(
+                            "Граф содержит ребра с отрицательным весом. Алгоритм Дейкстры неприменим.");
+                }
+            }
+
+            var distances = new Dictionary<T, double>();
+            var predecessors = new Dictionary<T, HashSet<T>>();
+            var pq = new PriorityQueue<T, double>();
+
+            foreach (var v in _adjacencyList.Keys)
+            {
+                distances[v] = double.PositiveInfinity;
+            }
+
+            distances[start] = 0;
+            pq.Enqueue(start, 0);
+
+            double minEndDist = double.PositiveInfinity;
+
+            while (pq.Count > 0)
+            {
+                if (!pq.TryDequeue(out T u, out double d)) break;
+                if (d > minEndDist) break;
+
+                if (d > distances[u]) continue;
+
+                if (u.Equals(end))
+                {
+                    minEndDist = d;
+                }
+
+                if (_adjacencyList.ContainsKey(u))
+                {
+                    foreach (var kvp in _adjacencyList[u])
+                    {
+                        T v = kvp.Key;
+                        double weight = kvp.Value;
+
+                        double newDist = distances[u] + weight;
+
+                        if (newDist < distances[v])
+                        {
+                            distances[v] = newDist;
+                            predecessors[v] = new HashSet<T> { u };
+                            pq.Enqueue(v, newDist);
+                        }
+                        else if (Math.Abs(newDist - distances[v]) < 1e-9)
+                        {
+                            if (!predecessors.ContainsKey(v)) predecessors[v] = new HashSet<T>();
+                            predecessors[v].Add(u);
+                        }
+                    }
+                }
+            }
+
+            if (!distances.ContainsKey(end) || double.IsPositiveInfinity(distances[end]))
+            {
+                return (double.PositiveInfinity, new List<List<T>>());
+            }
+
+            var paths = new List<List<T>>();
+            var pathStack = new List<T>();
+            ReconstructPathsDFS(end, start, predecessors, pathStack, paths);
+
+            return (distances[end], paths);
+        }
+
+        public (double distance, List<List<T>> paths) GetShortestPathsBellmanFord(T start, T end)
+        {
+            if (!_adjacencyList.ContainsKey(start)) throw new ArgumentException($"Вершина {start} не найдена.");
+            if (!_adjacencyList.ContainsKey(end)) throw new ArgumentException($"Вершина {end} не найдена.");
+
+            var distances = new Dictionary<T, double>();
+            var predecessors = new Dictionary<T, HashSet<T>>();
+
+            foreach (var v in _adjacencyList.Keys)
+            {
+                distances[v] = double.PositiveInfinity;
+            }
+
+            distances[start] = 0;
+
+            int V = _adjacencyList.Count;
+
+            var allEdges = new List<(T u, T v, double w)>();
+            foreach (var u in _adjacencyList.Keys)
+            {
+                foreach (var kvp in _adjacencyList[u])
+                {
+                    allEdges.Add((u, kvp.Key, kvp.Value));
+                }
+            }
+
+            for (int i = 0; i < V - 1; i++)
+            {
+                bool changed = false;
+
+                foreach (var edge in allEdges)
+                {
+                    T u = edge.u;
+                    T v = edge.v;
+                    double w = edge.w;
+
+                    if (double.IsPositiveInfinity(distances[u])) continue;
+
+                    if (distances[u] + w < distances[v] - 1e-9)
+                    {
+                        distances[v] = distances[u] + w;
+                        predecessors[v] = new HashSet<T> { u };
+                        changed = true;
+                    }
+                    else if (Math.Abs(distances[u] + w - distances[v]) < 1e-9)
+                    {
+                        if (!predecessors.ContainsKey(v)) predecessors[v] = new HashSet<T>();
+                        if (predecessors[v].Add(u))
+                        {
+                        }
+                    }
+                }
+
+                if (!changed) break;
+            }
+
+            foreach (var edge in allEdges)
+            {
+                T u = edge.u;
+                T v = edge.v;
+                double w = edge.w;
+
+                if (double.IsPositiveInfinity(distances[u])) continue;
+
+                if (distances[u] + w < distances[v] - 1e-9)
+                {
+                    throw new InvalidOperationException("Граф содержит цикл отрицательного веса.");
+                }
+            }
+
+            if (double.IsPositiveInfinity(distances[end]))
+            {
+                return (double.PositiveInfinity, new List<List<T>>());
+            }
+
+            var paths = new List<List<T>>();
+            var pathStack = new List<T>();
+            var reconstructionVisited = new HashSet<T>();
+
+            ReconstructPathsDFS(end, start, predecessors, pathStack, paths, reconstructionVisited);
+
+            return (distances[end], paths);
+        }
+
+        private void ReconstructPathsDFS(T current, T start, Dictionary<T, HashSet<T>> predecessors,
+            List<T> currentPath, List<List<T>> paths)
+        {
+            ReconstructPathsDFS(current, start, predecessors, currentPath, paths, new HashSet<T>());
+        }
+
+        private void ReconstructPathsDFS(T current, T start, Dictionary<T, HashSet<T>> predecessors,
+            List<T> currentPath, List<List<T>> paths, HashSet<T> pathVisited)
+        {
+            if (pathVisited.Contains(current)) return;
+
+            pathVisited.Add(current);
+            currentPath.Add(current);
+
+            if (current.Equals(start))
+            {
+                var fullPath = new List<T>(currentPath);
+                fullPath.Reverse();
+                paths.Add(fullPath);
+            }
+            else
+            {
+                if (predecessors.ContainsKey(current))
+                {
+                    foreach (var pred in predecessors[current])
+                    {
+                        ReconstructPathsDFS(pred, start, predecessors, currentPath, paths, pathVisited);
+                    }
+                }
+            }
+
+            currentPath.RemoveAt(currentPath.Count - 1);
+            pathVisited.Remove(current);
+        }
+
+        public List<(double distance, List<T> path)> GetKShortestPathsBellmanFord(T start, T end, int k)
+        {
+            if (!_adjacencyList.ContainsKey(start)) throw new ArgumentException($"Вершина {start} не найдена.");
+            if (!_adjacencyList.ContainsKey(end)) throw new ArgumentException($"Вершина {end} не найдена.");
+            if (k <= 0) throw new ArgumentException("K должно быть больше 0.");
+
+            Console.WriteLine($"\n--- Поиск {k} простых кратчайших путей из {start} в {end} (модифицированный Беллман-Форд) ---");
+
+            var dist = new Dictionary<T, List<(double cost, T pred, int predIdx, HashSet<T> visitedNodes)>>();
+
+            foreach (var v in _adjacencyList.Keys)
+            {
+                dist[v] = new List<(double, T, int, HashSet<T>)>();
+            }
+
+            var startVisited = new HashSet<T> { start };
+            dist[start].Add((0, default, -1, startVisited));
+
+            int V = _adjacencyList.Count;
+            int maxIterations = V + k + 5; 
+
+            var allEdges = new List<(T u, T v, double w)>();
+            foreach (var u in _adjacencyList.Keys)
+            {
+                foreach (var kvp in _adjacencyList[u])
+                {
+                    allEdges.Add((u, kvp.Key, kvp.Value));
+                }
+            }
+
+            for (int i = 0; i < maxIterations; i++)
+            {
+                bool changed = false;
+                Console.WriteLine($"\nИтерация {i + 1}:");
+
+                foreach (var edge in allEdges)
+                {
+                    T u = edge.u;
+                    T v = edge.v;
+                    double w = edge.w;
+
+                    if (dist[u].Count == 0) continue;
+
+                    for (int idx = 0; idx < dist[u].Count; idx++)
+                    {
+                        var currentState = dist[u][idx];
+                        
+                        if (currentState.visitedNodes.Contains(v)) continue;
+
+                        double newCost = currentState.cost + w;
+                        var vList = dist[v];
+
+                        if (vList.Count >= k && newCost >= vList.Last().cost - 1e-9)
+                        {
+                            if (newCost > vList.Last().cost + 1e-9) continue;
+                        }
+
+                        bool exists = false;
+                        foreach (var item in vList)
+                        {
+                            if (Math.Abs(item.cost - newCost) < 1e-9 &&
+                                EqualityComparer<T>.Default.Equals(item.pred, u) &&
+                                item.predIdx == idx)
+                            {
+                                exists = true;
+                                break;
+                            }
+                        }
+
+                        if (exists) continue;
+
+                        var newVisited = new HashSet<T>(currentState.visitedNodes);
+                        newVisited.Add(v);
+
+                        vList.Add((newCost, u, idx, newVisited));
+                        vList.Sort((a, b) => a.cost.CompareTo(b.cost));
+
+                        if (vList.Count > k)
+                        {
+                            vList.RemoveRange(k, vList.Count - k);
+                        }
+
+                        changed = true;
+                        Console.WriteLine($"  Обновление: найден путь до {v} со стоимостью {newCost} (через {u})");
+                    }
+                }
+
+                if (!changed)
+                {
+                    Console.WriteLine("  Изменений нет, ранняя остановка.");
+                    break;
+                }
+            }
+
+            Console.WriteLine("\n--- Восстановление путей ---");
+            var result = new List<(double distance, List<T> path)>();
+
+            foreach (var finalState in dist[end])
+            {
+                var path = new List<T>();
+                T curr = end;
+                T pred = finalState.pred;
+                int predIdx = finalState.predIdx;
+
+                path.Add(curr);
+
+                int limit = maxIterations * 2;
+                while (limit-- > 0)
+                {
+                    if (EqualityComparer<T>.Default.Equals(curr, start) && predIdx == -1)
+                    {
+                        break;
+                    }
+
+                    if (predIdx == -1) break;
+
+                    curr = pred;
+                    path.Add(curr);
+
+                    if (dist.ContainsKey(curr) && predIdx >= 0 && predIdx < dist[curr].Count)
+                    {
+                        var prevState = dist[curr][predIdx];
+                        pred = prevState.pred;
+                        predIdx = prevState.predIdx;
+                    }
+                    else
+                    {
+                        break;
+                    }
+                }
+
+                path.Reverse();
+                if (path.Count > 0 && path[0].Equals(start) && path.Last().Equals(end))
+                {
+                    result.Add((finalState.cost, path));
+                    Console.WriteLine($"Восстановлен путь: {string.Join(" -> ", path)} со стоимостью {finalState.cost}");
+                }
+            }
+
+            return result;
+        }
+
+        public List<List<T>> GetNegativeCyclesFloydWarshall()
+        {
+            var vertices = _adjacencyList.Keys.ToList();
+            int n = vertices.Count;
+            var vertexToIndex = new Dictionary<T, int>();
+            for (int i = 0; i < n; i++)
+            {
+                vertexToIndex[vertices[i]] = i;
+            }
+
+            double[,] dist = new double[n, n];
+            int?[,] parent = new int?[n, n];
+
+            for (int i = 0; i < n; i++)
+            {
+                for (int j = 0; j < n; j++)
+                {
+                    dist[i, j] = double.PositiveInfinity;
+                    parent[i, j] = null;
+                }
+
+                dist[i, i] = 0;
+            }
+
+            foreach (var u in _adjacencyList)
+            {
+                int uIdx = vertexToIndex[u.Key];
+                foreach (var v in u.Value)
+                {
+                    int vIdx = vertexToIndex[v.Key];
+                    dist[uIdx, vIdx] = v.Value;
+                    parent[uIdx, vIdx] = uIdx;
+                }
+            }
+
+            for (int k = 0; k < n; k++)
+            {
+                for (int i = 0; i < n; i++)
+                {
+                    for (int j = 0; j < n; j++)
+                    {
+                        if (!double.IsPositiveInfinity(dist[i, k]) && !double.IsPositiveInfinity(dist[k, j]))
+                        {
+                            if (dist[i, k] + dist[k, j] < dist[i, j])
+                            {
+                                dist[i, j] = dist[i, k] + dist[k, j];
+                                parent[i, j] = parent[k, j];
+                            }
+                        }
+                    }
+                }
+            }
+
+            var cycles = new List<List<T>>();
+            var seenCycles = new HashSet<string>();
+
+            for (int i = 0; i < n; i++)
+            {
+                if (dist[i, i] < 0)
+                {
+                    int curr = i;
+                    for (int step = 0; step < n; step++)
+                    {
+                        if (parent[i, curr] == null) break;
+                        curr = parent[i, curr].Value;
+                    }
+
+                    var cycle = new List<T>();
+                    int startNode = curr;
+                    bool cycleFound = false;
+
+                    cycle.Add(vertices[startNode]);
+
+                    int temp = startNode;
+                    int limit = n + 1;
+                    while (limit-- > 0)
+                    {
+                        if (parent[i, temp] == null) break;
+                        temp = parent[i, temp].Value;
+
+                        if (temp == startNode)
+                        {
+                            cycleFound = true;
+                            break;
+                        }
+
+                        cycle.Add(vertices[temp]);
+                    }
+
+                    if (cycleFound)
+                    {
+                        cycle.Add(vertices[startNode]);
+                        cycle.Reverse();
+
+                        var minVertex = cycle.Min();
+                        int minIdx = cycle.IndexOf(minVertex);
+                        var normalizedCycle = new List<T>();
+
+                        for (int k = 0; k < cycle.Count - 1; k++)
+                        {
+                            normalizedCycle.Add(cycle[(minIdx + k) % (cycle.Count - 1)]);
+                        }
+
+                        normalizedCycle.Add(normalizedCycle[0]);
+
+                        string hash = string.Join("->", normalizedCycle);
+                        if (seenCycles.Add(hash))
+                        {
+                            cycles.Add(normalizedCycle);
+                        }
+                    }
+                }
+            }
+
+            return cycles;
         }
     }
 }
