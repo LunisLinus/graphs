@@ -1,0 +1,314 @@
+@page "/"
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@inherits HomeBase
+
+<PageTitle>Graph Atelier</PageTitle>
+
+<div class="scene-shell">
+    <div class="ambient ambient-one"></div>
+    <div class="ambient ambient-two"></div>
+
+    <header class="hero-panel glass-panel">
+        <div>
+            <p class="eyebrow">Graph Atelier</p>
+            <h1>Графы как интерактивный веб-объект</h1>
+            <p class="hero-copy">Редактируй вершины, запускай алгоритмы и смотри пошаговую анимацию прямо в браузере.</p>
+        </div>
+
+        <div class="hero-metrics">
+            <div>
+                <span>Вершины</span>
+                <strong>@_graph.Vertices.Count</strong>
+            </div>
+            <div>
+                <span>Рёбра</span>
+                <strong>@_graph.GetEdgeList().Count</strong>
+            </div>
+            <div>
+                <span>Режим</span>
+                <strong>@(_stepMode ? "Пошаговый" : "Авто")</strong>
+            </div>
+        </div>
+    </header>
+
+    <div class="workspace-grid">
+        <aside class="sidebar">
+            <section class="glass-panel action-panel">
+                <div class="section-title">
+                    <h2>Новый граф</h2>
+                    <p>@GraphSummary</p>
+                </div>
+
+                <label class="toggle">
+                    <input type="checkbox" @bind="_newDirected" />
+                    <span>Ориентированный</span>
+                </label>
+                <label class="toggle">
+                    <input type="checkbox" @bind="_newWeighted" />
+                    <span>Взвешенный</span>
+                </label>
+
+                <button class="primary-button" @onclick="CreateNewGraph">Создать с нуля</button>
+
+                <div class="divider"></div>
+
+                <label class="upload-field">
+                    <span>Импорт из файла</span>
+                    <InputFile OnChange="LoadGraphFromFile" accept=".txt" />
+                </label>
+
+                <button class="ghost-button" @onclick="ExportEdgeList">Скачать edge list</button>
+                <button class="ghost-button" @onclick="ExportAdjacencyList">Скачать adjacency list</button>
+                <button class="ghost-button" @onclick="ToggleConvertPanel">Преобразовать граф</button>
+
+                @if (_showConvertPanel)
+                {
+                    <div class="selection-card">
+                        <div class="selection-title-row">
+                            <strong>Преобразование</strong>
+                            <button class="inline-button" @onclick="CancelConvert">Закрыть</button>
+                        </div>
+                        <p>Изменяет тип графа (ориентированный/взвешенный), сохраняя вершины и преобразуя рёбра.</p>
+
+                        <label class="toggle">
+                            <input type="checkbox" @bind="_convertDirected" />
+                            <span>Ориентированный</span>
+                        </label>
+                        <label class="toggle">
+                            <input type="checkbox" @bind="_convertWeighted" />
+                            <span>Взвешенный</span>
+                        </label>
+
+                        @if (_convertWeighted && !_graph.IsWeighted)
+                        {
+                            <input class="text-input" @bind="_convertDefaultWeightText" placeholder="Вес по умолчанию" />
+                        }
+
+                        <div class="action-grid two">
+                            <button class="primary-button" @onclick="ApplyConvert">Применить</button>
+                            <button class="ghost-button" @onclick="CancelConvert">Отмена</button>
+                        </div>
+                    </div>
+                }
+            </section>
+
+            <section class="glass-panel action-panel">
+                <div class="section-title">
+                    <h2>Выбор и правка</h2>
+                    <p>Клик по вершине выбирает её. Для парных действий важен порядок выбора.</p>
+                </div>
+
+                <div class="selection-card">
+                    <div class="selection-title-row">
+                        <strong>@SelectedVerticesLabel</strong>
+                        @if (HasSelection)
+                        {
+                            <button class="inline-button" @onclick="ClearSelection">Очистить</button>
+                        }
+                    </div>
+                    <p>@SelectedVerticesHelp</p>
+                    @if (HasSelection)
+                    {
+                        <div class="selection-chip-row">
+                            @foreach (var vertex in SelectedVertices)
+                            {
+                                <span class="selection-chip">@vertex</span>
+                            }
+                        </div>
+                    }
+                </div>
+
+                <input class="text-input" @bind="_newVertexName" placeholder="Имя вершины для добавления" />
+                <button class="primary-button" @onclick="AddVertexFromPanel">Добавить вершину</button>
+
+                @if (_graph.IsWeighted)
+                {
+                    <input class="text-input" @bind="_edgeWeightInput" placeholder="Вес нового ребра" />
+                }
+
+                <div class="action-grid two">
+                    <button class="primary-button" @onclick="AddEdgeFromPanel" disabled="@(!HasPairSelection)">Добавить ребро</button>
+                    <button class="ghost-button" @onclick="RemoveEdgeFromPanel" disabled="@(!HasPairSelection)">Удалить ребро</button>
+                    <button class="ghost-button" @onclick="ReverseSelectionOrder" disabled="@(!HasPairSelection)">Поменять порядок</button>
+                    <button class="danger-button" @onclick="RemoveVertexFromPanel" disabled="@(!HasSelection)">Удалить выбранные</button>
+                </div>
+            </section>
+
+            <section class="glass-panel action-panel">
+                <div class="section-title">
+                    <h2>Запросы</h2>
+                    <p>Запросы работают по выбранной вершине или по всему графу.</p>
+                </div>
+
+                <button class="ghost-button" @onclick="ShowAdjacency">Показать список смежности</button>
+                <button class="ghost-button" @onclick="ShowNonAdjacent" disabled="@(!HasSingleSelection)">Не смежные для выбранной</button>
+                <button class="ghost-button" @onclick="ShowIsolated">Изолированные вершины</button>
+                <button class="ghost-button" @onclick="RemovePendantEdges">Удалить рёбра к висячим</button>
+            </section>
+
+            <section class="glass-panel action-panel">
+                <div class="section-title">
+                    <h2>Алгоритмы</h2>
+                    <p>Шаги подсвечивают вершины, рёбра и оценки расстояний.</p>
+                </div>
+
+                <label class="toggle accent">
+                    <input type="checkbox" @bind="_stepMode" />
+                    <span>Пошаговый режим</span>
+                </label>
+
+                <div class="selection-note">
+                    <strong>Пара для алгоритмов:</strong>
+                    <span>@SelectedVerticesLabel</span>
+                </div>
+
+                <div class="action-grid">
+                    <button class="algorithm-button" @onclick="RunEquidistant" disabled="@(!HasPairSelection)">Вершина с равными путями</button>
+                    <button class="algorithm-button" @onclick="RunCyclesDfs">Фундаментальные циклы DFS</button>
+                    <button class="algorithm-button" @onclick="RunCyclesBfs">Фундаментальные циклы BFS</button>
+                    <button class="algorithm-button" @onclick="RunBoruvka">Минимальное остовное дерево</button>
+                    <button class="algorithm-button" @onclick="RunDijkstra" disabled="@(!HasPairSelection)">Dijkstra для пары</button>
+                    <button class="algorithm-button" @onclick="RunNegativeCycles">Отрицательные циклы</button>
+                </div>
+
+                <input class="text-input" @bind="_kValueText" placeholder="K" />
+                <button class="algorithm-button" @onclick="RunKShortestPaths" disabled="@(!HasPairSelection)">K кратчайших путей для пары</button>
+                <button class="algorithm-button" @onclick="RunMaxFlow" disabled="@(!HasPairSelection)">Максимальный поток для пары</button>
+
+            </section>
+        </aside>
+
+        <main class="stage-column">
+            <section class="glass-panel status-panel">
+                <div>
+                    <p class="status-label">Статус</p>
+                    <strong>@(string.IsNullOrWhiteSpace(_statusText) ? "Готов к работе" : _statusText)</strong>
+                </div>
+                <div>
+                    <p class="status-label">Выделение</p>
+                    <strong>@SelectedVerticesLabel</strong>
+                </div>
+                <div>
+                    <p class="status-label">Вывод</p>
+                    <strong>@(string.IsNullOrWhiteSpace(_resultTitle) ? "Ожидание" : _resultTitle)</strong>
+                </div>
+            </section>
+
+            @if (HasStepSession || HasAlgorithmState)
+            {
+                <section class="glass-panel step-session-panel">
+                    <div class="step-session-copy">
+                        <p class="status-label">Пошаговый режим</p>
+                        <strong>@StepStatusText</strong>
+                        <span>@StepHelpText</span>
+                    </div>
+
+                    <div class="step-session-actions">
+                        <button class="ghost-button nav-button" @onclick="PrevStep" disabled="@(!CanPrevStep)">◀ Назад</button>
+                        <div class="step-progress-pill">
+                            <strong>@StepProgress</strong>
+                            <span>@StepProgressCaption</span>
+                        </div>
+                        <button class="ghost-button nav-button" @onclick="NextStep" disabled="@(!CanNextStep)">Вперёд ▶</button>
+                        <button class="danger-button reset-button" @onclick="ExitAlgorithm">Сбросить алгоритм</button>
+                    </div>
+                </section>
+            }
+
+            <section class="glass-panel graph-stage">
+                <div class="graph-toolbar">
+                    <button class="ghost-button" @onclick="AutoLayout">Автораскладка</button>
+                    <button class="ghost-button" @onclick="FitGraphToView">Подогнать в экран</button>
+                    <button class="ghost-button" @onclick="ClearSelection">Снять выбор</button>
+                    <div class="zoom-toolbar">
+                        <button class="ghost-button compact" @onclick="ZoomOut">−</button>
+                        <input class="zoom-slider" type="range" min="40" max="220" step="10" value="@ZoomPercent" @oninput="OnZoomSliderChanged" />
+                        <button class="ghost-button compact" @onclick="ZoomIn">+</button>
+                        <button class="ghost-button compact" @onclick="ResetZoom">100%</button>
+                        <span>@ZoomPercent%</span>
+                    </div>
+                    <span>Shift+клик по пустому месту добавляет вершину. Клик по вершинам подряд создаёт ребро.</span>
+                </div>
+
+                <div class="graph-canvas-shell">
+                    <svg class="graph-canvas"
+                         @ref="_svgRef"
+                         viewBox="@SvgViewBox"
+                         @onpointermove="OnPointerMove"
+                         @onpointerup="OnPointerUp"
+                         @onpointerleave="OnPointerUp"
+                         @onpointerdown="OnCanvasPointerDown"
+                         @onwheel="OnCanvasWheel">
+                        <defs>
+                            <marker id="arrow" markerWidth="11" markerHeight="11" refX="9" refY="5.5" orient="auto">
+                                <path d="M 0 0 L 11 5.5 L 0 11 z" fill="#ffd1a1"></path>
+                            </marker>
+                        </defs>
+
+                        @foreach (var edge in EdgeVisuals)
+                        {
+                            <g>
+                                <line x1="@edge.X1" y1="@edge.Y1" x2="@edge.X2" y2="@edge.Y2"
+                                      class="@edge.CssClass"
+                                      @onpointerdown:stopPropagation="true"
+                                      @ondblclick="(() => ToggleEdgeDirection(edge.From, edge.To))"
+                                      marker-end="@(_graph.IsDirected ? "url(#arrow)" : null)"></line>
+                                @if (_graph.IsWeighted)
+                                {
+                                    <foreignObject x="@edge.LabelBoxX" y="@edge.LabelBoxY" width="48" height="24">
+                                        <div xmlns="http://www.w3.org/1999/xhtml"
+                                             class="weight-pill"
+                                             @onpointerdown:stopPropagation="true"
+                                             @ondblclick="(async () => await EditEdgeWeight(edge.From, edge.To))"
+                                             @ondblclick:stopPropagation="true">@edge.WeightText</div>
+                                    </foreignObject>
+                                }
+                            </g>
+                        }
+
+                        @foreach (var vertex in VertexVisuals)
+                        {
+                            <g class="vertex-group"
+                               transform="@vertex.Transform"
+                               @onpointerdown="(e => OnVertexPointerDown(vertex.Name, e))">
+                                <circle r="@vertex.Radius" class="@vertex.CssClass"></circle>
+                                <foreignObject x="-28" y="-13" width="56" height="26">
+                                    <div xmlns="http://www.w3.org/1999/xhtml" class="vertex-label">@vertex.Name</div>
+                                </foreignObject>
+                                @if (!string.IsNullOrWhiteSpace(vertex.Annotation))
+                                {
+                                    <foreignObject x="-48" y="24" width="96" height="18">
+                                        <div xmlns="http://www.w3.org/1999/xhtml" class="vertex-note">@vertex.Annotation</div>
+                                    </foreignObject>
+                                }
+                            </g>
+                        }
+                    </svg>
+                </div>
+            </section>
+
+            <section class="console-grid">
+                <article class="glass-panel result-panel">
+                    <div class="section-title">
+                        <h2>@(string.IsNullOrWhiteSpace(_resultTitle) ? "Результат" : _resultTitle)</h2>
+                        <p>Тут появляются ответы алгоритмов и текстовые представления графа.</p>
+                    </div>
+                    <pre>@(string.IsNullOrWhiteSpace(_resultText) ? "Запусти действие слева, чтобы увидеть результат." : _resultText)</pre>
+                </article>
+
+                <article class="glass-panel result-panel">
+                    <div class="section-title">
+                        <h2>Лента событий</h2>
+                        <p>Последние действия и шаги алгоритмов.</p>
+                    </div>
+                    <div class="log-list">
+                        @foreach (var line in _activityLog)
+                        {
+                            <div class="log-line">@line</div>
+                        }
+                    </div>
+                </article>
+            </section>
+        </main>
+    </div>
+</div>

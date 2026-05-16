@@ -21,8 +21,19 @@ namespace Graph
                 Console.WriteLine("5. Добавить ребро (дугу)");
                 Console.WriteLine("6. Удалить ребро (дугу)");
                 Console.WriteLine("7. Показать список смежности");
-                Console.WriteLine("8. Сохранить в файл");
-                Console.WriteLine("9. Выход");
+                Console.WriteLine("8. Вывести не смежные вершины");
+                Console.WriteLine("9. Вывести изолированные вершины");
+                Console.WriteLine("10. Удалить ребра в висячие вершины");
+                Console.WriteLine("11. Найти фундаментальные циклы (DFS)");
+                Console.WriteLine("12. Найти фундаментальные циклы (BFS)");
+                Console.WriteLine("13. Найти вершину с равными путями (BFS)");
+                Console.WriteLine("14. Найти минимальное остовное дерево (Boruvka)");
+                Console.WriteLine("15. Найти кратчайший путь (Dijkstra)");
+                Console.WriteLine("16. Найти K кратчайших путей (Bellman-Ford)");
+                Console.WriteLine("17. Найти циклы отрицательного веса (Floyd-Warshall)");
+                Console.WriteLine("18. Найти максимальный поток (Edmonds-Karp)");
+                Console.WriteLine("19. Сохранить в файл");
+                Console.WriteLine("20. Выход");
                 Console.Write("Выберите опцию: ");
 
                 string choice = Console.ReadLine();
@@ -53,9 +64,42 @@ namespace Graph
                             Console.WriteLine(_graph.ToString());
                             break;
                         case "8":
-                            SaveGraph();
+                            ShowNonAdjacent();
                             break;
                         case "9":
+                            ShowIsolated();
+                            break;
+                        case "10":
+                            RemoveEdgesToPendant();
+                            break;
+                        case "11":
+                            ShowCyclesDFS();
+                            break;
+                        case "12":
+                            ShowCyclesBFS();
+                            break;
+                        case "13":
+                            FindEquidistant();
+                            break;
+                        case "14":
+                            ShowMSTBoruvka();
+                            break;
+                        case "15":
+                            FindShortestPathDijkstra();
+                            break;
+                        case "16":
+                            FindKShortestPathsBellmanFord();
+                            break;
+                        case "17":
+                            FindNegativeCyclesFloyd();
+                            break;
+                        case "18":
+                            FindMaxFlowEdmondsKarp();
+                            break;
+                        case "19":
+                            SaveGraph();
+                            break;
+                        case "20":
                             return;
                         default:
                             Console.WriteLine("Неверная опция.");
@@ -83,8 +127,196 @@ namespace Graph
         {
             Console.Write("Введите путь к файлу: ");
             string path = Console.ReadLine();
-            _graph = new Graph<string>(path, s => s); 
+            _graph = new Graph<string>(path, s => s, Console.WriteLine); 
             Console.WriteLine("Граф успешно загружен.");
+        }
+
+        private void ShowNonAdjacent()
+        {
+            Console.Write("Введите имя вершины: ");
+            string v = Console.ReadLine();
+            
+            if (!_graph.ContainsVertex(v))
+            {
+                Console.WriteLine($"Вершина '{v}' не найдена.");
+                return;
+            }
+
+            var nonAdjacent = _graph.GetNonAdjacentVertices(v);
+            if (nonAdjacent.Count == 0)
+            {
+                Console.WriteLine($"У вершины '{v}' нет не смежных вершин (она смежна со всеми другими).");
+            }
+            else
+            {
+                Console.WriteLine($"Вершины, не смежные с '{v}': {string.Join(", ", nonAdjacent)}");
+            }
+        }
+
+        private void ShowIsolated()
+        {
+            var isolated = _graph.GetIsolatedVertices();
+            if (isolated.Count == 0)
+            {
+                Console.WriteLine("В графе нет изолированных вершин.");
+            }
+            else
+            {
+                Console.WriteLine($"Изолированные вершины: {string.Join(", ", isolated)}");
+            }
+        }
+
+        private void RemoveEdgesToPendant()
+        {
+            var newGraph = _graph.RemoveEdgesToPendantVertices();
+            _graph = newGraph;
+            Console.WriteLine("Ребра, ведущие в висячие вершины, удалены. Граф обновлен.");
+        }
+
+        private void ShowCyclesDFS()
+        {
+            var cycles = _graph.GetFundamentalCyclesDFS();
+            Console.WriteLine($"Найдено циклов (DFS): {cycles.Count}");
+            foreach (var cycle in cycles)
+            {
+                Console.WriteLine(string.Join(" -> ", cycle));
+            }
+        }
+
+        private void ShowCyclesBFS()
+        {
+            var cycles = _graph.GetFundamentalCyclesBFS();
+            Console.WriteLine($"Найдено циклов (BFS): {cycles.Count}");
+            foreach (var cycle in cycles)
+            {
+                Console.WriteLine(string.Join(" -> ", cycle));
+            }
+        }
+
+        private void FindEquidistant()
+        {
+            Console.Write("Введите вершину U: ");
+            string u = Console.ReadLine();
+            Console.Write("Введите вершину V: ");
+            string v = Console.ReadLine();
+
+            try
+            {
+                var bfsResult = _graph.FindEquidistantVertexBFS(u, v);
+                if (!string.IsNullOrEmpty(bfsResult))
+                {
+                    Console.WriteLine($"[BFS] Найдена вершина: {bfsResult}");
+                }
+                else
+                {
+                    Console.WriteLine("[BFS] Вершина с равными путями не найдена (среди кратчайших).");
+                }
+
+                var dfsResult = _graph.FindEquidistantVertexDFS(u, v);
+                if (!string.IsNullOrEmpty(dfsResult))
+                {
+                    Console.WriteLine($"[DFS] Найдена вершина: {dfsResult}");
+                }
+                else
+                {
+                    Console.WriteLine("[DFS] Вершина с равными путями не найдена (среди путей DFS-дерева).");
+                }
+            }
+            catch (ArgumentException ex)
+            {
+                Console.WriteLine($"Ошибка: {ex.Message}");
+            }
+        }
+
+        private void ShowMSTBoruvka()
+        {
+            try
+            {
+                var mst = _graph.GetMinimumSpanningTreeBoruvka(Console.WriteLine);
+                Console.WriteLine("Минимальное остовное дерево (Алгоритм Борувки):");
+                
+                var edges = mst.GetEdgeList();
+                double totalWeight = 0;
+                
+                foreach (var edge in edges)
+                {
+                    Console.WriteLine(edge.ToString());
+                    totalWeight += edge.Weight;
+                }
+                
+                Console.WriteLine($"Общий вес: {totalWeight}");
+            }
+            catch (InvalidOperationException ex)
+            {
+                Console.WriteLine($"Ошибка: {ex.Message}");
+            }
+        }
+
+        private void FindShortestPathDijkstra()
+        {
+            Console.Write("Введите начальную вершину: ");
+            string start = Console.ReadLine();
+            Console.Write("Введите конечную вершину: ");
+            string end = Console.ReadLine();
+
+            try
+            {
+                var (distance, paths) = _graph.GetShortestPathsDijkstra(start, end);
+
+                if (double.IsPositiveInfinity(distance))
+                {
+                    Console.WriteLine($"Путь из {start} в {end} не существует.");
+                }
+                else
+                {
+                    Console.WriteLine($"Кратчайшее расстояние: {distance}");
+                    Console.WriteLine($"Найдено путей: {paths.Count}");
+                    foreach (var path in paths)
+                    {
+                        Console.WriteLine(string.Join(" -> ", path));
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Ошибка: {ex.Message}");
+            }
+        }
+
+        private void FindKShortestPathsBellmanFord()
+        {
+            Console.Write("Введите начальную вершину: ");
+            string start = Console.ReadLine();
+            Console.Write("Введите конечную вершину: ");
+            string end = Console.ReadLine();
+            Console.Write("Введите количество путей (K): ");
+            if (!int.TryParse(Console.ReadLine(), out int k))
+            {
+                Console.WriteLine("Некорректное число.");
+                return;
+            }
+
+            try
+            {
+                var paths = _graph.GetKShortestPathsBellmanFord(start, end, k, Console.WriteLine);
+
+                if (paths.Count == 0)
+                {
+                    Console.WriteLine($"Пути из {start} в {end} не найдены.");
+                }
+                else
+                {
+                    Console.WriteLine($"Найдено {paths.Count} кратчайших путей (Bellman-Ford):");
+                    for (int i = 0; i < paths.Count; i++)
+                    {
+                        Console.WriteLine($"#{i + 1} (Длина: {paths[i].distance}): {string.Join(" -> ", paths[i].path)}");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Ошибка: {ex.Message}");
+            }
         }
 
         private void SaveGraph()
@@ -106,6 +338,49 @@ namespace Graph
 
             _graph.SaveToFile(path, format);
             Console.WriteLine("Граф успешно сохранен.");
+        }
+
+        private void FindMaxFlowEdmondsKarp()
+        {
+            Console.Write("Введите вершину-источник (Source): ");
+            string source = Console.ReadLine();
+            Console.Write("Введите вершину-сток (Sink): ");
+            string sink = Console.ReadLine();
+
+            try
+            {
+                double maxFlow = _graph.GetMaxFlowEdmondsKarp(source, sink, Console.WriteLine);
+                Console.WriteLine($"\nМаксимальный поток из {source} в {sink}: {maxFlow}");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Ошибка: {ex.Message}");
+            }
+        }
+
+        private void FindNegativeCyclesFloyd()
+        {
+            try
+            {
+                var cycles = _graph.GetNegativeCyclesFloydWarshall();
+                
+                if (cycles.Count == 0)
+                {
+                    Console.WriteLine("Циклов отрицательного веса не найдено.");
+                }
+                else
+                {
+                    Console.WriteLine($"Найдено циклов отрицательного веса: {cycles.Count}");
+                    foreach (var cycle in cycles)
+                    {
+                        Console.WriteLine(string.Join(" -> ", cycle));
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Ошибка: {ex.Message}");
+            }
         }
 
         private void AddVertex()
