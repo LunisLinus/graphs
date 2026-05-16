@@ -56,7 +56,7 @@ namespace Graph
             }
         }
 
-        public Graph(string filePath, Func<string, T> parser)
+        public Graph(string filePath, Func<string, T> parser, Action<string>? log = null)
         {
             if (!File.Exists(filePath)) throw new FileNotFoundException("Файл не найден", filePath);
 
@@ -96,7 +96,7 @@ namespace Graph
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"Ошибка при обработке строки {i + 1}: {ex.Message}");
+                    log?.Invoke($"Ошибка при обработке строки {i + 1}: {ex.Message}");
                 }
             }
         }
@@ -208,6 +208,64 @@ namespace Graph
             return edges;
         }
 
+        public Graph<T> ConvertTo(bool isDirected, bool isWeighted, double defaultWeightForNewWeighted = 1.0)
+        {
+            var converted = new Graph<T>(isDirected, isWeighted);
+            foreach (var v in _adjacencyList.Keys)
+            {
+                converted.AddVertex(v);
+            }
+
+            double WeightFor(Edge<T> e) => isWeighted ? (IsWeighted ? e.Weight : defaultWeightForNewWeighted) : 1.0;
+
+            if (!isDirected && IsDirected)
+            {
+                var pairs = new Dictionary<(T, T), double>();
+                foreach (var e in GetEdgeList())
+                {
+                    var a = e.From;
+                    var b = e.To;
+                    var u = a.CompareTo(b) <= 0 ? a : b;
+                    var v = a.CompareTo(b) <= 0 ? b : a;
+
+                    var w = WeightFor(e);
+                    if (pairs.TryGetValue((u, v), out var existing))
+                    {
+                        pairs[(u, v)] = Math.Min(existing, w);
+                    }
+                    else
+                    {
+                        pairs[(u, v)] = w;
+                    }
+                }
+
+                foreach (var kvp in pairs)
+                {
+                    converted.AddEdge(kvp.Key.Item1, kvp.Key.Item2, kvp.Value);
+                }
+
+                return converted;
+            }
+
+            if (isDirected && !IsDirected)
+            {
+                foreach (var e in GetEdgeList())
+                {
+                    var w = WeightFor(e);
+                    converted.AddEdge(e.From, e.To, w);
+                }
+
+                return converted;
+            }
+
+            foreach (var e in GetEdgeList())
+            {
+                converted.AddEdge(e.From, e.To, WeightFor(e));
+            }
+
+            return converted;
+        }
+
         public void SaveToFile(string filePath, GraphSaveFormat format = GraphSaveFormat.EdgeList)
         {
             using (var writer = new StreamWriter(filePath))
@@ -282,6 +340,19 @@ namespace Graph
         }
 
         public bool ContainsVertex(T vertex) => _adjacencyList.ContainsKey(vertex);
+
+        public IReadOnlyCollection<T> Vertices => _adjacencyList.Keys;
+
+        public IReadOnlyDictionary<T, IReadOnlyDictionary<T, double>> GetAdjacencyListSnapshot()
+        {
+            var snapshot = new Dictionary<T, IReadOnlyDictionary<T, double>>(_adjacencyList.Count);
+            foreach (var kvp in _adjacencyList)
+            {
+                snapshot[kvp.Key] = new Dictionary<T, double>(kvp.Value);
+            }
+
+            return snapshot;
+        }
 
         public List<T> GetNonAdjacentVertices(T vertex)
         {
@@ -407,7 +478,7 @@ namespace Graph
             return newGraph;
         }
 
-        public List<List<T>> GetFundamentalCyclesDFS()
+        public List<List<T>> GetFundamentalCyclesDFS(Action<string>? log = null)
         {
             var cycles = new List<List<T>>();
             var visited = new HashSet<T>();
@@ -418,7 +489,7 @@ namespace Graph
             {
                 if (!visited.Contains(vertex))
                 {
-                    DFSFindCycles(vertex, visited, recursionStack, parent, cycles);
+                    DFSFindCycles(vertex, visited, recursionStack, parent, cycles, log);
                 }
             }
 
@@ -426,15 +497,17 @@ namespace Graph
         }
 
         private void DFSFindCycles(T current, HashSet<T> visited, HashSet<T> recursionStack,
-            Dictionary<T, T> parent, List<List<T>> cycles)
+            Dictionary<T, T> parent, List<List<T>> cycles, Action<string>? log)
         {
             visited.Add(current);
             recursionStack.Add(current);
+            log?.Invoke($"DFS: посещаем {current}");
 
             if (_adjacencyList.ContainsKey(current))
             {
                 foreach (var neighbor in _adjacencyList[current].Keys)
                 {
+                    log?.Invoke($"DFS: ребро {current} -> {neighbor}");
                     if (recursionStack.Contains(neighbor))
                     {
                         if (!IsDirected && parent.ContainsKey(current) && parent[current].Equals(neighbor))
@@ -468,11 +541,12 @@ namespace Graph
                         correctCycle.Add(neighbor);
 
                         cycles.Add(correctCycle);
+                        log?.Invoke($"DFS: найден цикл {string.Join(" -> ", correctCycle)}");
                     }
                     else if (!visited.Contains(neighbor))
                     {
                         parent[neighbor] = current;
-                        DFSFindCycles(neighbor, visited, recursionStack, parent, cycles);
+                        DFSFindCycles(neighbor, visited, recursionStack, parent, cycles, log);
                     }
                 }
             }
@@ -480,7 +554,7 @@ namespace Graph
             recursionStack.Remove(current);
         }
 
-        public List<List<T>> GetFundamentalCyclesBFS()
+        public List<List<T>> GetFundamentalCyclesBFS(Action<string>? log = null)
         {
             var cycles = new List<List<T>>();
             var visited = new HashSet<T>();
@@ -498,9 +572,11 @@ namespace Graph
                 while (queue.Count > 0)
                 {
                     var u = queue.Dequeue();
+                    log?.Invoke($"BFS: посещаем {u}");
 
                     foreach (var v in _adjacencyList[u].Keys)
                     {
+                        log?.Invoke($"BFS: ребро {u} -> {v}");
                         if (!visited.Contains(v))
                         {
                             visited.Add(v);
@@ -571,6 +647,7 @@ namespace Graph
                     cycle.Add(u);
 
                     cycles.Add(cycle);
+                    log?.Invoke($"BFS: найден цикл {string.Join(" -> ", cycle)}");
                 }
             }
 
@@ -697,7 +774,7 @@ namespace Graph
             return default;
         }
 
-        public Graph<T> GetMinimumSpanningTreeBoruvka()
+        public Graph<T> GetMinimumSpanningTreeBoruvka(Action<string>? log = null)
         {
             if (IsDirected)
                 throw new InvalidOperationException("Алгоритм Борувка работает только для неориентированных графов.");
@@ -740,7 +817,7 @@ namespace Graph
                         rank[rootI]++;
                     }
 
-                    Console.WriteLine($"Union: {rootI} и {rootJ} объединены");
+                    log?.Invoke($"Union: {rootI} и {rootJ} объединены");
                 }
             }
 
@@ -749,7 +826,7 @@ namespace Graph
 
             while (numTrees > 1)
             {
-                Console.WriteLine($"\n=== Шаг {step} ===");
+                log?.Invoke($"\n=== Шаг {step} ===");
 
                 var cheapest = new Dictionary<T, (T u, T v, double w)>();
                 bool edgeAdded = false;
@@ -778,22 +855,22 @@ namespace Graph
                         T setU = Find(u);
                         T setV = Find(v);
 
-                        Console.WriteLine($"Проверяем ребро {u} - {v} (вес {w})");
+                        log?.Invoke($"Проверяем ребро {u} - {v} (вес {w})");
 
                         if (!setU.Equals(setV))
                         {
-                            Console.WriteLine($"Компоненты: {setU} и {setV}");
+                            log?.Invoke($"Компоненты: {setU} и {setV}");
 
                             if (!cheapest.ContainsKey(setU) || w < cheapest[setU].w)
                             {
                                 cheapest[setU] = (u, v, w);
-                                Console.WriteLine($"Минимальное ребро для компоненты {setU}: {u}-{v} ({w})");
+                                log?.Invoke($"Минимальное ребро для компоненты {setU}: {u}-{v} ({w})");
                             }
 
                             if (!cheapest.ContainsKey(setV) || w < cheapest[setV].w)
                             {
                                 cheapest[setV] = (u, v, w);
-                                Console.WriteLine($"Минимальное ребро для компоненты {setV}: {u}-{v} ({w})");
+                                log?.Invoke($"Минимальное ребро для компоненты {setV}: {u}-{v} ({w})");
                             }
                         }
                     }
@@ -801,7 +878,7 @@ namespace Graph
 
                 var edgesToAdd = cheapest.Values.Distinct().ToList();
 
-                Console.WriteLine("\nДобавляем рёбра:");
+                log?.Invoke("\nДобавляем рёбра:");
 
                 foreach (var edge in edgesToAdd)
                 {
@@ -810,7 +887,7 @@ namespace Graph
 
                     if (!setU.Equals(setV))
                     {
-                        Console.WriteLine($"Добавлено ребро {edge.u} - {edge.v} (вес {edge.w})");
+                        log?.Invoke($"Добавлено ребро {edge.u} - {edge.v} (вес {edge.w})");
 
                         mst.AddEdge(edge.u, edge.v, edge.w);
                         Union(setU, setV);
@@ -822,24 +899,24 @@ namespace Graph
 
                 if (!edgeAdded)
                 {
-                    Console.WriteLine("Нет рёбер для объединения. Граф несвязный.");
+                    log?.Invoke("Нет рёбер для объединения. Граф несвязный.");
                     break;
                 }
 
                 step++;
             }
 
-            Console.WriteLine("\n=== Готовое минимальное остовное дерево ===");
+            log?.Invoke("\n=== Готовое минимальное остовное дерево ===");
 
             foreach (var edge in mst.GetEdgeList())
             {
-                Console.WriteLine(edge);
+                log?.Invoke(edge.ToString());
             }
 
             return mst;
         }
 
-        public (double distance, List<List<T>> paths) GetShortestPathsDijkstra(T start, T end)
+        public (double distance, List<List<T>> paths) GetShortestPathsDijkstra(T start, T end, Action<string>? log = null)
         {
             if (!_adjacencyList.ContainsKey(start)) throw new ArgumentException($"Вершина {start} не найдена.");
             if (!_adjacencyList.ContainsKey(end)) throw new ArgumentException($"Вершина {end} не найдена.");
@@ -867,6 +944,7 @@ namespace Graph
             pq.Enqueue(start, 0);
 
             double minEndDist = double.PositiveInfinity;
+            log?.Invoke($"Dijkstra: старт {start}, цель {end}");
 
             while (pq.Count > 0)
             {
@@ -874,10 +952,12 @@ namespace Graph
                 if (d > minEndDist) break;
 
                 if (d > distances[u]) continue;
+                log?.Invoke($"Извлечена вершина {u} с расстоянием {d}");
 
                 if (u.Equals(end))
                 {
                     minEndDist = d;
+                    log?.Invoke($"Достигнута цель {end} с расстоянием {d}");
                 }
 
                 if (_adjacencyList.ContainsKey(u))
@@ -894,15 +974,18 @@ namespace Graph
                             distances[v] = newDist;
                             predecessors[v] = new HashSet<T> { u };
                             pq.Enqueue(v, newDist);
+                            log?.Invoke($"Релаксация: {u} -> {v}, новое расстояние {newDist}");
                         }
                         else if (Math.Abs(newDist - distances[v]) < 1e-9)
                         {
                             if (!predecessors.ContainsKey(v)) predecessors[v] = new HashSet<T>();
                             predecessors[v].Add(u);
+                            log?.Invoke($"Альтернатива: {u} -> {v}, расстояние {newDist}");
                         }
                     }
                 }
             }
+
 
             if (!distances.ContainsKey(end) || double.IsPositiveInfinity(distances[end]))
             {
@@ -1035,13 +1118,13 @@ namespace Graph
             pathVisited.Remove(current);
         }
 
-        public List<(double distance, List<T> path)> GetKShortestPathsBellmanFord(T start, T end, int k)
+        public List<(double distance, List<T> path)> GetKShortestPathsBellmanFord(T start, T end, int k, Action<string>? log = null)
         {
             if (!_adjacencyList.ContainsKey(start)) throw new ArgumentException($"Вершина {start} не найдена.");
             if (!_adjacencyList.ContainsKey(end)) throw new ArgumentException($"Вершина {end} не найдена.");
             if (k <= 0) throw new ArgumentException("K должно быть больше 0.");
 
-            Console.WriteLine($"\n--- Поиск {k} простых кратчайших путей из {start} в {end} (модифицированный Беллман-Форд) ---");
+            log?.Invoke($"\n--- Поиск {k} простых кратчайших путей из {start} в {end} (модифицированный Беллман-Форд) ---");
 
             var dist = new Dictionary<T, List<(double cost, T pred, int predIdx, HashSet<T> visitedNodes)>>();
 
@@ -1068,7 +1151,7 @@ namespace Graph
             for (int i = 0; i < maxIterations; i++)
             {
                 bool changed = false;
-                Console.WriteLine($"\nИтерация {i + 1}:");
+                log?.Invoke($"\nИтерация {i + 1}:");
 
                 foreach (var edge in allEdges)
                 {
@@ -1118,18 +1201,18 @@ namespace Graph
                         }
 
                         changed = true;
-                        Console.WriteLine($"  Обновление: найден путь до {v} со стоимостью {newCost} (через {u})");
+                        log?.Invoke($"  Обновление: найден путь до {v} со стоимостью {newCost} (через {u})");
                     }
                 }
 
                 if (!changed)
                 {
-                    Console.WriteLine("  Изменений нет, ранняя остановка.");
+                    log?.Invoke("  Изменений нет, ранняя остановка.");
                     break;
                 }
             }
 
-            Console.WriteLine("\n--- Восстановление путей ---");
+            log?.Invoke("\n--- Восстановление путей ---");
             var result = new List<(double distance, List<T> path)>();
 
             foreach (var finalState in dist[end])
@@ -1170,14 +1253,14 @@ namespace Graph
                 if (path.Count > 0 && path[0].Equals(start) && path.Last().Equals(end))
                 {
                     result.Add((finalState.cost, path));
-                    Console.WriteLine($"Восстановлен путь: {string.Join(" -> ", path)} со стоимостью {finalState.cost}");
+                    log?.Invoke($"Восстановлен путь: {string.Join(" -> ", path)} со стоимостью {finalState.cost}");
                 }
             }
 
             return result;
         }
 
-        public List<List<T>> GetNegativeCyclesFloydWarshall()
+        public List<List<T>> GetNegativeCyclesFloydWarshall(Action<string>? log = null)
         {
             var vertices = _adjacencyList.Keys.ToList();
             int n = vertices.Count;
@@ -1214,6 +1297,7 @@ namespace Graph
 
             for (int k = 0; k < n; k++)
             {
+                log?.Invoke($"Floyd-Warshall: промежуточная вершина {vertices[k]} ({k + 1}/{n})");
                 for (int i = 0; i < n; i++)
                 {
                     for (int j = 0; j < n; j++)
@@ -1224,6 +1308,7 @@ namespace Graph
                             {
                                 dist[i, j] = dist[i, k] + dist[k, j];
                                 parent[i, j] = parent[k, j];
+                                log?.Invoke($"Обновление: {vertices[i]} -> {vertices[j]} = {dist[i, j]} через {vertices[k]}");
                             }
                         }
                     }
@@ -1292,6 +1377,115 @@ namespace Graph
             }
 
             return cycles;
+        }
+
+        public double GetMaxFlowEdmondsKarp(T source, T sink, Action<string>? log = null)
+        {
+            if (!_adjacencyList.ContainsKey(source)) throw new ArgumentException($"Вершина {source} не найдена.");
+            if (!_adjacencyList.ContainsKey(sink)) throw new ArgumentException($"Вершина {sink} не найдена.");
+            if (source.Equals(sink)) return 0;
+
+            var residualCapacity = new Dictionary<T, Dictionary<T, double>>();
+            foreach (var u in _adjacencyList.Keys)
+            {
+                residualCapacity[u] = new Dictionary<T, double>();
+            }
+
+            foreach (var u in _adjacencyList)
+            {
+                foreach (var v in u.Value)
+                {
+                    T from = u.Key;
+                    T to = v.Key;
+                    double capacity = v.Value;
+
+                    if (capacity < 0)
+                        throw new InvalidOperationException("Алгоритм Эдмондса-Карпа не поддерживает отрицательные пропускные способности.");
+
+                    if (!residualCapacity[from].ContainsKey(to))
+                        residualCapacity[from][to] = 0;
+                    residualCapacity[from][to] += capacity;
+                    
+                    if (!residualCapacity.ContainsKey(to))
+                    {
+                        residualCapacity[to] = new Dictionary<T, double>();
+                    }
+                    if (!residualCapacity[to].ContainsKey(from))
+                    {
+                        residualCapacity[to][from] = 0;
+                    }
+                }
+            }
+
+            double maxFlow = 0;
+
+            while (true)
+            {
+                var parent = new Dictionary<T, T>();
+                var queue = new Queue<T>();
+                
+                queue.Enqueue(source);
+                parent[source] = source; 
+
+                bool reachedSink = false;
+
+                while (queue.Count > 0 && !reachedSink)
+                {
+                    var u = queue.Dequeue();
+
+                    if (!residualCapacity.ContainsKey(u)) continue;
+
+                    foreach (var kvp in residualCapacity[u])
+                    {
+                        var v = kvp.Key;
+                        var capacity = kvp.Value;
+
+                        if (!parent.ContainsKey(v) && capacity > 0)
+                        {
+                            parent[v] = u;
+                            queue.Enqueue(v);
+
+                            if (v.Equals(sink))
+                            {
+                                reachedSink = true;
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                if (!reachedSink)
+                    break;
+
+                double pathFlow = double.PositiveInfinity;
+                T curr = sink;
+                while (!curr.Equals(source))
+                {
+                    T prev = parent[curr];
+                    pathFlow = Math.Min(pathFlow, residualCapacity[prev][curr]);
+                    curr = prev;
+                }
+
+                curr = sink;
+                var pathNodes = new List<T>();
+                pathNodes.Add(curr);
+
+                while (!curr.Equals(source))
+                {
+                    T prev = parent[curr];
+                    residualCapacity[prev][curr] -= pathFlow;
+                    residualCapacity[curr][prev] += pathFlow;
+                    curr = prev;
+                    pathNodes.Add(curr);
+                }
+
+                pathNodes.Reverse();
+                log?.Invoke($"Найдён увеличивающий путь: {string.Join(" -> ", pathNodes)} с потоком {pathFlow}");
+
+                maxFlow += pathFlow;
+            }
+
+            return maxFlow;
         }
     }
 }

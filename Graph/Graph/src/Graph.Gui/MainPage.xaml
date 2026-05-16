@@ -1,0 +1,155 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             x:Class="Graph.Gui.MainPage"
+             Title="Graph">
+
+    <Grid RowDefinitions="Auto,*"
+          ColumnDefinitions="260,*"
+          Padding="14"
+          RowSpacing="14"
+          ColumnSpacing="14">
+
+        <Border Grid.Row="0"
+                Grid.ColumnSpan="2"
+                Padding="14">
+            <Grid ColumnDefinitions="*,Auto,Auto,Auto,Auto,Auto"
+                  ColumnSpacing="10"
+                  VerticalOptions="Center">
+                <VerticalStackLayout Spacing="2">
+                    <Label Text="{Binding TitleText}"
+                           FontSize="18"
+                           FontAttributes="Bold" />
+                    <Label Text="{Binding GraphSummary}"
+                           Style="{StaticResource Caption}"
+                           LineBreakMode="TailTruncation" />
+                    <Label Text="{Binding StatusText}"
+                           Style="{StaticResource Caption}"
+                           LineBreakMode="TailTruncation" />
+                </VerticalStackLayout>
+
+                <HorizontalStackLayout Grid.Column="1"
+                                       Spacing="8"
+                                       VerticalOptions="Center">
+                    <Label Text="Пошагово"
+                           Style="{StaticResource Caption}"
+                           VerticalOptions="Center" />
+                    <Switch IsToggled="{Binding IsStepMode}" />
+                </HorizontalStackLayout>
+
+                <Button Grid.Column="2"
+                        Text="◀"
+                        Style="{StaticResource SecondaryButton}"
+                        IsVisible="{Binding HasStepSession}"
+                        Command="{Binding PrevStepCommand}" />
+                <Label Grid.Column="3"
+                       Text="{Binding StepProgress}"
+                       Style="{StaticResource Caption}"
+                       IsVisible="{Binding HasStepSession}"
+                       VerticalOptions="Center" />
+                <Button Grid.Column="4"
+                        Text="▶"
+                        Style="{StaticResource SecondaryButton}"
+                        IsVisible="{Binding HasStepSession}"
+                        Command="{Binding NextStepCommand}" />
+                <Button Grid.Column="5"
+                        Text="Выйти"
+                        Style="{StaticResource DangerButton}"
+                        IsVisible="{Binding HasAlgorithmState}"
+                        Command="{Binding ExitAlgorithmCommand}" />
+            </Grid>
+        </Border>
+
+        <Border Grid.Row="1"
+                Grid.Column="0">
+            <ScrollView>
+                <VerticalStackLayout Padding="12"
+                                     Spacing="10">
+
+                    <Label Text="Граф"
+                           Style="{StaticResource SectionHeader}" />
+                    <Button Text="Новый граф"
+                            Command="{Binding NewGraphCommand}" />
+                    <Button Text="Загрузить из файла"
+                            Command="{Binding LoadGraphCommand}" />
+                    <Button Text="Сохранить в файл"
+                            Style="{StaticResource SecondaryButton}"
+                            Command="{Binding SaveGraphCommand}" />
+                    <Button Text="Показать список смежности"
+                            Style="{StaticResource SecondaryButton}"
+                            Command="{Binding ShowAdjacencyCommand}" />
+                    <Button Text="Преобразовать граф"
+                            Style="{StaticResource SecondaryButton}"
+                            Command="{Binding ConvertGraphCommand}" />
+
+                    <Label Text="Редактирование"
+                           Style="{StaticResource SectionHeader}"
+                           Margin="0,8,0,0" />
+                    <Button Text="Добавить вершину"
+                            Command="{Binding AddVertexCommand}" />
+                    <Button Text="Удалить вершину"
+                            Style="{StaticResource SecondaryButton}"
+                            Command="{Binding RemoveVertexCommand}" />
+                    <Button Text="Добавить ребро (дугу)"
+                            Command="{Binding AddEdgeCommand}" />
+                    <Button Text="Удалить ребро (дугу)"
+                            Style="{StaticResource SecondaryButton}"
+                            Command="{Binding RemoveEdgeCommand}" />
+
+                    <Label Text="Запросы"
+                           Style="{StaticResource SectionHeader}"
+                           Margin="0,8,0,0" />
+                    <Button Text="Не смежные вершины"
+                            Style="{StaticResource SecondaryButton}"
+                            Command="{Binding ShowNonAdjacentCommand}" />
+                    <Button Text="Изолированные вершины"
+                            Style="{StaticResource SecondaryButton}"
+                            Command="{Binding ShowIsolatedCommand}" />
+                    <Button Text="Удалить ребра в висячие вершины"
+                            Style="{StaticResource SecondaryButton}"
+                            Command="{Binding RemovePendantEdgesCommand}" />
+
+                    <Label Text="Алгоритмы (с шагами)"
+                           Style="{StaticResource SectionHeader}"
+                           Margin="0,8,0,0" />
+                    <Button Text="Фундаментальные циклы (DFS)"
+                            Style="{StaticResource SecondaryButton}"
+                            Command="{Binding CyclesDfsCommand}" />
+                    <Button Text="Фундаментальные циклы (BFS)"
+                            Style="{StaticResource SecondaryButton}"
+                            Command="{Binding CyclesBfsCommand}" />
+                    <Button Text="Вершина с равными путями"
+                            Style="{StaticResource SecondaryButton}"
+                            Command="{Binding FindEquidistantCommand}" />
+                    <Button Text="Минимальное остовное дерево (Boruvka)"
+                            Style="{StaticResource SecondaryButton}"
+                            Command="{Binding MstBoruvkaCommand}" />
+                    <Button Text="Кратчайший путь (Dijkstra)"
+                            Style="{StaticResource SecondaryButton}"
+                            Command="{Binding DijkstraCommand}" />
+                    <Button Text="K кратчайших путей (Bellman-Ford)"
+                            Style="{StaticResource SecondaryButton}"
+                            Command="{Binding KShortestPathsCommand}" />
+                    <Button Text="Циклы отрицательного веса (Floyd-Warshall)"
+                            Style="{StaticResource SecondaryButton}"
+                            Command="{Binding NegativeCyclesCommand}" />
+                    <Button Text="Максимальный поток (Edmonds-Karp)"
+                            Style="{StaticResource SecondaryButton}"
+                            Command="{Binding MaxFlowCommand}" />
+
+                </VerticalStackLayout>
+            </ScrollView>
+        </Border>
+
+        <Border Grid.Row="1"
+                Grid.Column="1"
+                Padding="12">
+            <GraphicsView x:Name="GraphView"
+                          Drawable="{Binding Drawable}"
+                          HorizontalOptions="Fill"
+                          VerticalOptions="Fill" />
+        </Border>
+
+    </Grid>
+
+</ContentPage>

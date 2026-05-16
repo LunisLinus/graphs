@@ -31,8 +31,9 @@ namespace Graph
                 Console.WriteLine("15. Найти кратчайший путь (Dijkstra)");
                 Console.WriteLine("16. Найти K кратчайших путей (Bellman-Ford)");
                 Console.WriteLine("17. Найти циклы отрицательного веса (Floyd-Warshall)");
-                Console.WriteLine("18. Сохранить в файл");
-                Console.WriteLine("19. Выход");
+                Console.WriteLine("18. Найти максимальный поток (Edmonds-Karp)");
+                Console.WriteLine("19. Сохранить в файл");
+                Console.WriteLine("20. Выход");
                 Console.Write("Выберите опцию: ");
 
                 string choice = Console.ReadLine();
@@ -93,9 +94,12 @@ namespace Graph
                             FindNegativeCyclesFloyd();
                             break;
                         case "18":
-                            SaveGraph();
+                            FindMaxFlowEdmondsKarp();
                             break;
                         case "19":
+                            SaveGraph();
+                            break;
+                        case "20":
                             return;
                         default:
                             Console.WriteLine("Неверная опция.");
@@ -123,7 +127,7 @@ namespace Graph
         {
             Console.Write("Введите путь к файлу: ");
             string path = Console.ReadLine();
-            _graph = new Graph<string>(path, s => s); 
+            _graph = new Graph<string>(path, s => s, Console.WriteLine); 
             Console.WriteLine("Граф успешно загружен.");
         }
 
@@ -228,7 +232,7 @@ namespace Graph
         {
             try
             {
-                var mst = _graph.GetMinimumSpanningTreeBoruvka();
+                var mst = _graph.GetMinimumSpanningTreeBoruvka(Console.WriteLine);
                 Console.WriteLine("Минимальное остовное дерево (Алгоритм Борувки):");
                 
                 var edges = mst.GetEdgeList();
@@ -294,7 +298,7 @@ namespace Graph
 
             try
             {
-                var paths = _graph.GetKShortestPathsBellmanFord(start, end, k);
+                var paths = _graph.GetKShortestPathsBellmanFord(start, end, k, Console.WriteLine);
 
                 if (paths.Count == 0)
                 {
@@ -334,6 +338,24 @@ namespace Graph
 
             _graph.SaveToFile(path, format);
             Console.WriteLine("Граф успешно сохранен.");
+        }
+
+        private void FindMaxFlowEdmondsKarp()
+        {
+            Console.Write("Введите вершину-источник (Source): ");
+            string source = Console.ReadLine();
+            Console.Write("Введите вершину-сток (Sink): ");
+            string sink = Console.ReadLine();
+
+            try
+            {
+                double maxFlow = _graph.GetMaxFlowEdmondsKarp(source, sink, Console.WriteLine);
+                Console.WriteLine($"\nМаксимальный поток из {source} в {sink}: {maxFlow}");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Ошибка: {ex.Message}");
+            }
         }
 
         private void FindNegativeCyclesFloyd()
